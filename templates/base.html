@@ -69,29 +69,39 @@
     </main>
 
     {% block javascript %}
-    <script>
-        // Fonction pour afficher l'overlay
-        function showLoader() {
-            document.getElementById('loader-overlay').classList.add('active');
-        }
+   <script>
+    function showLoader() {
+        document.getElementById('loader-overlay').classList.add('active');
+    }
 
-        // Ajouter le loader sur les liens internes
-        document.querySelectorAll('a.nav-link').forEach(link => {
-            link.addEventListener('click', function(e) {
-                e.preventDefault();
-                const href = this.href;
-                showLoader();
-                setTimeout(() => {
-                    window.location.href = href;
-                }, 300);
-            });
-        });
+    function hideLoader() {
+        document.getElementById('loader-overlay').classList.remove('active');
+    }
 
-        // Affiche le loader si la page se recharge
-        window.addEventListener('beforeunload', function () {
+    document.querySelectorAll('a.nav-link').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const href = this.href;
             showLoader();
+            setTimeout(() => {
+                window.location.href = href;
+            }, 300);
         });
-    </script>
+    });
+
+    window.addEventListener('beforeunload', function () {
+        showLoader();
+    });
+
+    window.addEventListener('pageshow', function (event) {
+        if (event.persisted) {
+            hideLoader();
+        } else {
+            hideLoader();
+        }
+    });
+</script>
+
     {% endblock %}
 </body>
 </html>
