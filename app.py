@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, render_template_string, make_response
+from flask import Flask, render_template, request, redirect, url_for, session, flash, make_response
 import sqlite3
 import requests
 import hashlib
@@ -28,6 +28,33 @@ PTERODACTYL_HEADERS = {
     'Content-Type': 'application/json',
     'Accept': 'Application/vnd.pterodactyl.v1+json'
 }
+
+# ==================== DATABASE FUNCTIONS ====================
+
+def get_db_connection():
+    """Crée et retourne une connexion à la base de données"""
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def execute_query(query, params=(), fetch_one=False, fetch_all=False, commit=False):
+    """Fonction générique pour exécuter des requêtes SQL"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    
+    result = None
+    if fetch_one:
+        result = cursor.fetchone()
+        result = dict(result) if result else None
+    elif fetch_all:
+        result = [dict(row) for row in cursor.fetchall()]
+    
+    if commit:
+        conn.commit()
+    
+    conn.close()
+    return result
 
 def init_db():
     """Initialise la base de données"""
@@ -81,7 +108,6 @@ def init_db():
             FOREIGN KEY (tier_id) REFERENCES tiers (id)
         )
     ''')
- 
     
     conn.commit()
     conn.close()
@@ -92,22 +118,247 @@ def hash_password(password):
 
 def get_tier_by_id(tier_id):
     """Récupère un tier par son ID"""
-    conn = sqlite3.connect(DATABASE_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT * FROM tiers WHERE id = ?", (tier_id,))
-    row = c.fetchone()
-    conn.close()
-    return dict(row) if row else None
+    return execute_query("SELECT * FROM tiers WHERE id = ?", (tier_id,), fetch_one=True)
 
 def get_all_tiers():
-    conn = sqlite3.connect(DATABASE_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT * FROM tiers")
-    rows = c.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+    """Récupère tous les tiers"""
+    return execute_query("SELECT * FROM tiers", fetch_all=True)
+
+def get_user_servers(user_id):
+    """Récupère tous les serveurs d'un utilisateur"""
+    return execute_query(
+        "SELECT * FROM servers WHERE user_id = ? ORDER BY created_at DESC",
+        (user_id,),
+        fetch_all=True
+    )
+
+def get_server_by_uuid(uuid):
+    """Récupère un serveur par son UUID"""
+    return execute_query(
+        "SELECT * FROM servers WHERE pterodactyl_server_uuid = ?",
+        (uuid,),
+        fetch_one=True
+    )
+
+def update_server_status(server_id, suspended, expires_at=None):
+    """Met à jour le statut d'un serveur"""
+    if expires_at is not None:
+        execute_query(
+            "UPDATE servers SET suspended = ?, expires_at = ? WHERE id = ?",
+            (suspended, expires_at, server_id),
+            commit=True
+        )
+    else:
+        execute_query(
+            "UPDATE servers SET suspended = ? WHERE id = ?",
+            (suspended, server_id),
+            commit=True
+        )
+
+def delete_server_from_db(pterodactyl_server_id):
+    """Supprime un serveur de la base de données"""
+    execute_query(
+        "DELETE FROM servers WHERE pterodactyl_server_id = ?",
+        (pterodactyl_server_id,),
+        commit=True
+    )
+
+# ==================== PTERODACTYL API FUNCTIONS ====================
+
+def pterodactyl_request(method, endpoint, data=None, params=None):
+    """Fonction générique pour les requêtes à l'API Pterodactyl"""
+    url = f"{PTERODACTYL_URL}/api/application/{endpoint}"
+    
+    try:
+        response = requests.request(
+            method=method,
+            url=url,
+            headers=PTERODACTYL_HEADERS,
+            json=data,
+            params=params
+        )
+        return response
+    except Exception as e:
+        print(f"Erreur API Pterodactyl ({method} {endpoint}): {e}")
+        return None
+
+def create_pterodactyl_user(username, email, password):
+    """Crée un utilisateur sur Pterodactyl"""
+    data = {
+        'username': username,
+        'email': email,
+        'first_name': username,
+        'last_name': 'User',
+        'password': password
+    }
+    
+    response = pterodactyl_request('POST', 'users', data=data)
+    
+    if response and response.status_code == 201:
+        return response.json()['attributes']['id']
+    
+    if response:
+        print(f"Erreur création utilisateur Pterodactyl: {response.text}")
+    return None
+
+def get_pterodactyl_nodes():
+    """Récupère la liste des nœuds Pterodactyl"""
+    response = pterodactyl_request('GET', 'nodes', params={'include': 'location'})
+    
+    if response and response.status_code == 200:
+        return response.json()['data']
+    return []
+
+def get_pterodactyl_eggs():
+    """Récupère la liste des eggs Pterodactyl avec leurs détails complets"""
+    response = pterodactyl_request('GET', 'nests')
+    
+    if not response or response.status_code != 200:
+        return []
+    
+    eggs = []
+    nests = response.json()['data']
+    
+    # Pour chaque nest, récupérer les eggs
+    for nest in nests:
+        nest_id = nest['attributes']['id']
+        eggs_response = pterodactyl_request(
+            'GET',
+            f"nests/{nest_id}/eggs",
+            params={'include': 'variables'}
+        )
+        
+        if eggs_response and eggs_response.status_code == 200:
+            nest_eggs = eggs_response.json()['data']
+            for egg in nest_eggs:
+                # Filtrer les variables pour ne garder que celles modifiables par l'utilisateur
+                user_editable_variables = []
+                if 'variables' in egg['attributes']['relationships'] and 'data' in egg['attributes']['relationships']['variables']:
+                    user_editable_variables = egg['attributes']['relationships']['variables']['data']
+                
+                eggs.append({
+                    'id': egg['attributes']['id'],
+                    'name': egg['attributes']['name'],
+                    'docker_image': egg['attributes']['docker_image'],
+                    'startup': egg['attributes']['startup'],
+                    'variables': {'data': user_editable_variables},
+                    'nest': nest['attributes']['name'],
+                })
+    
+    return eggs
+
+def get_egg_details(egg_id):
+    """Récupère les détails spécifiques d'un egg"""
+    nests_response = pterodactyl_request('GET', 'nests')
+    
+    if not nests_response or nests_response.status_code != 200:
+        return None
+    
+    nests = nests_response.json()['data']
+    
+    for nest in nests:
+        nest_id = nest['attributes']['id']
+        eggs_response = pterodactyl_request(
+            'GET',
+            f"nests/{nest_id}/eggs/{egg_id}",
+            params={'include': 'variables'}
+        )
+        
+        if eggs_response and eggs_response.status_code == 200:
+            egg_data = eggs_response.json()['attributes']
+            return {
+                'docker_image': egg_data['docker_image'],
+                'startup': egg_data['startup']
+            }
+    
+    return None
+
+def get_available_allocation(node_id):
+    """Récupère une allocation disponible pour le node correspondant"""
+    response = pterodactyl_request('GET', f"nodes/{node_id}", params={'include': 'allocations'})
+    
+    if response and response.status_code == 200:
+        allocations = response.json()['attributes']['relationships']['allocations']['data']
+        for allocation in allocations:
+            if not allocation['attributes']['assigned']:
+                return allocation['attributes']['id']
+    
+    return None
+
+def get_server_details(server_id):
+    """Récupère les détails d'un serveur depuis Pterodactyl"""
+    response = pterodactyl_request(
+        'GET',
+        f"servers/{server_id}",
+        params={'include': 'egg,location,node,databases,backups,allocations'}
+    )
+    
+    if response and response.status_code == 200:
+        return response.json()
+    return None
+
+def create_pterodactyl_server(user_pterodactyl_id, server_name, egg_id, node_id, environment, tier_id):
+    """Crée un serveur sur Pterodactyl"""
+    tier = get_tier_by_id(tier_id)
+    if not tier:
+        print(f"Tier {tier_id} introuvable")
+        return None
+    
+    egg_details = get_egg_details(egg_id)
+    if not egg_details:
+        print(f"Impossible de récupérer les détails de l'egg {egg_id}")
+        return None
+    
+    data = {
+        'name': server_name,
+        'user': user_pterodactyl_id,
+        'egg': egg_id,
+        'docker_image': egg_details['docker_image'],
+        'startup': egg_details['startup'],
+        'environment': environment,
+        'limits': {
+            'memory': tier['ram_limit'],
+            'swap': tier['swap_limit'],
+            'disk': tier['disk_limit'],
+            'io': tier['io_weight'],
+            'cpu': tier['cpu_limit']
+        },
+        'feature_limits': {
+            'databases': tier['database_limit'],
+            'allocations': tier['allocations_limit'],
+            'backups': tier['backup_limit']
+        },
+        'allocation': {
+            'default': get_available_allocation(node_id)
+        }
+    }
+    
+    response = pterodactyl_request('POST', 'servers', data=data)
+    
+    if response and response.status_code == 201:
+        attrs = response.json()['attributes']
+        return {'uuid': attrs['uuid'], 'id': attrs['id']}
+    
+    if response:
+        print(f"Erreur création serveur: {response.text}")
+    return None
+
+def suspend_pterodactyl_server(server_id):
+    """Suspend un serveur sur Pterodactyl"""
+    response = pterodactyl_request('POST', f"servers/{server_id}/suspend")
+    return response and response.status_code == 204
+
+def unsuspend_pterodactyl_server(server_id):
+    """Réactive un serveur sur Pterodactyl"""
+    response = pterodactyl_request('POST', f"servers/{server_id}/unsuspend")
+    return response and response.status_code == 204
+
+def delete_pterodactyl_server(server_id):
+    """Supprime un serveur sur Pterodactyl"""
+    response = pterodactyl_request('DELETE', f"servers/{server_id}")
+    return response and response.status_code == 204
+
+# ==================== DECORATORS ====================
 
 def login_required(f):
     """Décorateur pour vérifier si l'utilisateur est connecté"""
@@ -118,235 +369,8 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-def create_pterodactyl_user(username, email, password):
-    """Crée un utilisateur sur Pterodactyl"""
-    try:
-        data = {
-            'username': username,
-            'email': email,
-            'first_name': username,
-            'last_name': 'User',
-            'password': password
-        }
-        
-        response = requests.post(
-            f"{PTERODACTYL_URL}/api/application/users",
-            headers=PTERODACTYL_HEADERS,
-            json=data
-        )
-        
-        if response.status_code == 201:
-            return response.json()['attributes']['id']
-        else:
-            print(f"Erreur création utilisateur Pterodactyl: {response.text}")
-            return None
-    except Exception as e:
-        print(f"Erreur API Pterodactyl: {e}")
-        return None
+# ==================== ROUTES ====================
 
-def get_pterodactyl_nodes():
-    """Récupère la liste des nœuds Pterodactyl"""
-    try:
-        params = {
-            'include':'location'
-        }
-
-        response = requests.get(
-            f"{PTERODACTYL_URL}/api/application/nodes",
-            headers=PTERODACTYL_HEADERS, params=params
-        )
-        
-        if response.status_code == 200:
-            return response.json()['data']
-        return []
-    except Exception as e:
-        print(f"Erreur récupération nœuds: {e}")
-        return []
-
-def get_pterodactyl_eggs():
-    """Récupère la liste des eggs Pterodactyl avec leurs détails complets"""
-    try:
-        response = requests.get(
-            f"{PTERODACTYL_URL}/api/application/nests",
-            headers=PTERODACTYL_HEADERS
-        )
-        
-        if response.status_code == 200:
-            eggs = []
-            nests = response.json()['data']
-            
-            # Pour chaque nest, récupérer les eggs
-            for nest in nests:
-                nest_id = nest['attributes']['id']
-                params = {'include': 'variables'}
-                eggs_response = requests.get(
-                    f"{PTERODACTYL_URL}/api/application/nests/{nest_id}/eggs",
-                    headers=PTERODACTYL_HEADERS, params=params
-                )
-                
-                if eggs_response.status_code == 200:
-                    nest_eggs = eggs_response.json()['data']
-                    for egg in nest_eggs:
-                        # Filtrer les variables pour ne garder que celles modifiables par l'utilisateur
-                        user_editable_variables = []
-                        if 'variables' in egg['attributes']['relationships'] and 'data' in egg['attributes']['relationships']['variables']:
-                            for var in egg['attributes']['relationships']['variables']['data']:
-                                user_editable_variables.append(var)
-                        
-                        eggs.append({
-                            'id': egg['attributes']['id'],
-                            'name': egg['attributes']['name'],
-                            'docker_image': egg['attributes']['docker_image'],
-                            'startup': egg['attributes']['startup'],
-                            'variables': {
-                                'data': user_editable_variables
-                            },
-                            'nest': nest['attributes']['name'],
-                        })
-            
-            return eggs
-        return []
-    except Exception as e:
-        print(f"Erreur récupération eggs: {e}")
-        return []
-
-def get_egg_details(egg_id):
-    """Récupère les détails spécifiques d'un egg"""
-    try:
-        # D'abord, trouver le nest qui contient cet egg
-        nests_response = requests.get(
-            f"{PTERODACTYL_URL}/api/application/nests",
-            headers=PTERODACTYL_HEADERS
-        )
-        
-        if nests_response.status_code != 200:
-            return None
-            
-        nests = nests_response.json()['data']
-        
-        for nest in nests:
-            nest_id = nest['attributes']['id']
-            params = {'include': 'variables'}
-            eggs_response = requests.get(
-                f"{PTERODACTYL_URL}/api/application/nests/{nest_id}/eggs/{egg_id}",
-                headers=PTERODACTYL_HEADERS, params=params
-            )
-            
-            if eggs_response.status_code == 200:
-                egg_data = eggs_response.json()['attributes']
-                return {
-                    'docker_image': egg_data['docker_image'],
-                    'startup': egg_data['startup']
-                }
-        
-        return None
-    except Exception as e:
-        print(f"Erreur récupération détails egg: {e}")
-        return None
-
-def get_available_allocation(node_id):
-    """Récupère une allocation disponible pour le node correspondant"""
-    try:
-        params = {
-            'include':'allocations'
-        }
-
-        response = requests.get(
-            f"{PTERODACTYL_URL}/api/application/nodes/{node_id}",
-            headers=PTERODACTYL_HEADERS, params=params
-        )
-        
-        if response.status_code == 200:
-            for allocation in response.json()['attributes']['relationships']['allocations']['data']:
-                if not allocation['attributes']['assigned']:
-                    return allocation['attributes']['id']    
-        return []
-    except Exception as e:
-        print(f"Erreur récupération nœuds: {e}")
-        return []
-
-def get_server_details(id):
-    params = {
-            'include':'egg,location,node,databases,backups, allocations'
-        }
-
-    response = requests.get(
-        f"{PTERODACTYL_URL}/api/application/servers/{id}",
-        headers=PTERODACTYL_HEADERS, params=params
-    )
-
-    if response.status_code == 200:
-        return response.json()
-    else:
-        return None
-
-def create_pterodactyl_server(user_pterodactyl_id, server_name, egg_id, node_id, environment, tier_id):
-    """Crée un serveur sur Pterodactyl"""
-    try:
-        # Récupérer les détails de l'egg
-        tier = get_tier_by_id(tier_id)
-
-        egg_details = get_egg_details(egg_id)
-        if not egg_details:
-            print(f"Impossible de récupérer les détails de l'egg {egg_id}")
-            return None
-        
-        data = {
-            'name': server_name,
-            'user': user_pterodactyl_id,
-            'egg': egg_id,
-            'docker_image': egg_details['docker_image'],
-            'startup': egg_details['startup'],
-            'environment': environment,
-            'limits': {
-                'memory': tier['ram_limit'],
-                'swap': tier['swap_limit'],
-                'disk': tier['disk_limit'],
-                'io': tier['io_weight'],
-                'cpu': tier['cpu_limit']
-            },
-            'feature_limits': {
-                'databases': tier['database_limit'],
-                'allocations': tier['allocations_limit'],
-                'backups': tier['backup_limit']
-            },
-            'allocation': {
-                'default': get_available_allocation(node_id)
-            }
-        }
-        
-        response = requests.post(
-            f"{PTERODACTYL_URL}/api/application/servers",
-            headers=PTERODACTYL_HEADERS,
-            json=data
-        )
-        
-        if response.status_code == 201:
-            return {'uuid':response.json()['attributes']['uuid'],'id':response.json()['attributes']['id']} 
-        else:
-            print(f"Erreur création serveur: {response.text}")
-            return None
-    except Exception as e:
-        print(f"Erreur création serveur: {e}")
-        return None
-
-def get_user_servers(user_id):
-    """Récupère tous les serveurs d'un utilisateur (toutes les colonnes)"""
-    conn = sqlite3.connect(DATABASE_PATH)
-    conn.row_factory = sqlite3.Row  # permet un dict propre
-    c = conn.cursor()
-    
-    c.execute('''
-        SELECT *
-        FROM servers
-        WHERE user_id = ?
-        ORDER BY created_at DESC
-    ''', (user_id,))
-    
-    rows = c.fetchall()
-    conn.close()
-    
-    return [dict(row) for row in rows]
 @app.route('/')
 def index():
     if 'user_id' in session:
@@ -365,14 +389,15 @@ def register():
             flash('Tous les champs sont obligatoires')
             return render_template('register.html')
         
-        conn = sqlite3.connect(DATABASE_PATH)
-        c = conn.cursor()
-        
         # Vérifier si l'utilisateur existe déjà
-        c.execute('SELECT id FROM users WHERE username = ? OR email = ?', (username, email))
-        if c.fetchone():
+        existing_user = execute_query(
+            'SELECT id FROM users WHERE username = ? OR email = ?',
+            (username, email),
+            fetch_one=True
+        )
+        
+        if existing_user:
             flash('Nom d\'utilisateur ou email déjà utilisé')
-            conn.close()
             return render_template('register.html')
         
         # Créer l'utilisateur sur Pterodactyl
@@ -380,18 +405,15 @@ def register():
         
         if not pterodactyl_user_id:
             flash('Erreur lors de la création du compte Pterodactyl')
-            conn.close()
             return render_template('register.html')
         
         # Créer l'utilisateur dans la base de données locale
         password_hash = hash_password(password)
-        c.execute('''
-            INSERT INTO users (username, email, password_hash, pterodactyl_user_id)
-            VALUES (?, ?, ?, ?)
-        ''', (username, email, password_hash, pterodactyl_user_id))
-        
-        conn.commit()
-        conn.close()
+        execute_query(
+            'INSERT INTO users (username, email, password_hash, pterodactyl_user_id) VALUES (?, ?, ?, ?)',
+            (username, email, password_hash, pterodactyl_user_id),
+            commit=True
+        )
         
         flash('Compte créé avec succès!')
         return redirect(url_for('login'))
@@ -403,24 +425,18 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        
-        conn = sqlite3.connect(DATABASE_PATH)
-        c = conn.cursor()
-        
         password_hash = hash_password(password)
-        c.execute('''
-            SELECT id, username, pterodactyl_user_id 
-            FROM users 
-            WHERE username = ? AND password_hash = ?
-        ''', (username, password_hash))
         
-        user = c.fetchone()
-        conn.close()
+        user = execute_query(
+            'SELECT id, username, pterodactyl_user_id FROM users WHERE username = ? AND password_hash = ?',
+            (username, password_hash),
+            fetch_one=True
+        )
         
         if user:
-            session['user_id'] = user[0]
-            session['username'] = user[1]
-            session['pterodactyl_user_id'] = user[2]
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['pterodactyl_user_id'] = user['pterodactyl_user_id']
             flash('Connexion réussie!')
             return redirect(url_for('dashboard'))
         else:
@@ -439,12 +455,14 @@ def logout():
 def dashboard():
     servers = get_user_servers(session['user_id'])
     servers_details = []
-    tiers = get_all_tiers()
-
+    
     for server in servers:
         details = get_server_details(server['pterodactyl_server_id'])
-        servers_details.append(details)
-
+        if details:
+            servers_details.append(details)
+    
+    tiers = get_all_tiers()
+    
     return render_template(
         'dashboard.html',
         username=session['username'],
@@ -459,19 +477,23 @@ def dashboard():
 def server_infos(uuid):
     if uuid == "create":
         return redirect(url_for('create_server'))
-
-    user_servers = get_user_servers(session['user_id'])
-
-    server = next((s for s in user_servers if s['pterodactyl_server_uuid'] == uuid), None)
-
-    if server:
-        tiers = get_all_tiers()
-        server_details = get_server_details(server['pterodactyl_server_id'])
-        
-        return render_template('server.html', tiers=tiers, server=server, server_details=server_details, now=round(time.time()))
-
-    flash('Serveur introuvable')
-    return redirect(url_for('dashboard'))
+    
+    server = get_server_by_uuid(uuid)
+    
+    if not server or server['user_id'] != session['user_id']:
+        flash('Serveur introuvable')
+        return redirect(url_for('dashboard'))
+    
+    tiers = get_all_tiers()
+    server_details = get_server_details(server['pterodactyl_server_id'])
+    
+    return render_template(
+        'server.html',
+        tiers=tiers,
+        server=server,
+        server_details=server_details,
+        now=round(time.time())
+    )
 
 @app.route('/server/create', methods=['GET', 'POST'])
 @login_required
@@ -486,17 +508,18 @@ def create_server():
             flash('Le nom du serveur est obligatoire')
             return redirect(url_for('create_server'))
         
+        # Extraire les variables d'environnement
         environment = {
-            key[4:-1]: value   # enlève "env[" et "]"
+            key[4:-1]: value
             for key, value in request.form.items()
             if key.startswith("env[")
         }
-
+        
         # Créer le serveur sur Pterodactyl
         pterodactyl_server_ids = create_pterodactyl_server(
-            session['pterodactyl_user_id'], 
-            server_name, 
-            egg_id, 
+            session['pterodactyl_user_id'],
+            server_name,
+            egg_id,
             node_id,
             environment,
             tier_id
@@ -507,16 +530,14 @@ def create_server():
             return redirect(url_for('create_server'))
         
         # Enregistrer le serveur dans la base de données
-        conn = sqlite3.connect(DATABASE_PATH)
-        c = conn.cursor()
-        
-        c.execute('''
-            INSERT INTO servers (user_id, server_name, pterodactyl_server_id, pterodactyl_server_uuid, node_id, egg_id, tier_id, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (session['user_id'], server_name, pterodactyl_server_ids['id'], pterodactyl_server_ids['uuid'], node_id, egg_id, tier_id, round(time.time())))
-        
-        conn.commit()
-        conn.close()
+        execute_query(
+            '''INSERT INTO servers (user_id, server_name, pterodactyl_server_id, 
+               pterodactyl_server_uuid, node_id, egg_id, tier_id, expires_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+            (session['user_id'], server_name, pterodactyl_server_ids['id'],
+             pterodactyl_server_ids['uuid'], node_id, egg_id, tier_id, round(time.time())),
+            commit=True
+        )
         
         flash('Serveur créé avec succès!')
         return redirect(url_for('dashboard'))
@@ -524,9 +545,7 @@ def create_server():
     # Récupérer les nœuds et eggs pour le formulaire
     nodes = get_pterodactyl_nodes()
     eggs = get_pterodactyl_eggs()
-
     tiers = get_all_tiers()
-    
     
     return render_template('create_server.html', nodes=nodes, eggs=eggs, tiers=tiers)
 
@@ -544,137 +563,105 @@ def renew_server(uuid):
     token = str(uuid_lib.uuid4())
     renew_tokens[token] = {
         'pterodactyl_server_uuid': uuid,
-        'ip':request.remote_addr,
-        'ua':request.headers.get('User-Agent'),
-        'expire': time.time()+ 2*60*60,
+        'ip': request.remote_addr,
+        'ua': request.headers.get('User-Agent'),
+        'expire': time.time() + 2 * 60 * 60,
         'created': time.time()
     }
+    
     ad_url = "https://link-hub.net/1383828/yHHriFaA5xSk"
     response = make_response(redirect(ad_url))
-    response.set_cookie('renew_token', token, max_age=5*60, httponly=True, samesite='Lax')
+    response.set_cookie('renew_token', token, max_age=5 * 60, httponly=True, samesite='Lax')
     return response
 
 @app.route('/server/renewed')
 def validate_renew():
     token = request.cookies.get('renew_token')
     record = renew_tokens.get(token)
-
+    
     # Vérifications initiales
     if not record:
         flash("Le renouvellement de votre serveur a expiré. Veuillez renouveler le serveur à nouveau")
         return redirect(url_for('dashboard'))
-
+    
     now = time.time()
-
+    
     if now > record['expire']:
         flash("Le renouvellement de votre serveur a expiré. Veuillez renouveler le serveur à nouveau")
         del renew_tokens[token]
         return redirect(url_for('dashboard'))
-
+    
     if record['ip'] != request.remote_addr:
         return "IP mismatch", 403
-
+    
     if now - record['created'] < 10:
         flash("Le renouvellement de votre serveur n'est pas valide. Veuillez renouveler le serveur à nouveau")
         del renew_tokens[token]
         return redirect(url_for('dashboard'))
-
+    
     pterodactyl_server_uuid = record['pterodactyl_server_uuid']
-
-    with sqlite3.connect(DATABASE_PATH) as conn:
-        cursor = conn.cursor()
-
-        cursor.execute(
-            "SELECT pterodactyl_server_id, tier_id FROM servers WHERE pterodactyl_server_uuid = ?",
-            (pterodactyl_server_uuid,)
-        )
-        row = cursor.fetchone()
-        if not row:
-            flash("Serveur introuvable.")
-            return redirect(url_for('dashboard'))
-
-        server_id, tier_id = row
-
-        expire = round(now + get_tier_by_id(tier_id)['duration_hours'] * 3600)
-
-        cursor.execute(
-            "UPDATE servers SET suspended = 0, expires_at = ? WHERE pterodactyl_server_uuid = ?",
-            (expire, pterodactyl_server_uuid)
-        )
-
-    response = requests.post(
-        f"{PTERODACTYL_URL}/api/application/servers/{server_id}/unsuspend",
-        headers=PTERODACTYL_HEADERS
+    
+    # Récupérer le serveur
+    server = execute_query(
+        "SELECT pterodactyl_server_id, tier_id FROM servers WHERE pterodactyl_server_uuid = ?",
+        (pterodactyl_server_uuid,),
+        fetch_one=True
     )
-
-    if response.status_code == 204:
+    
+    if not server:
+        flash("Serveur introuvable.")
+        del renew_tokens[token]
+        return redirect(url_for('dashboard'))
+    
+    # Calculer la nouvelle date d'expiration
+    tier = get_tier_by_id(server['tier_id'])
+    expire = round(now + tier['duration_hours'] * 3600)
+    
+    # Mettre à jour la base de données
+    execute_query(
+        "UPDATE servers SET suspended = 0, expires_at = ? WHERE pterodactyl_server_uuid = ?",
+        (expire, pterodactyl_server_uuid),
+        commit=True
+    )
+    
+    # Réactiver le serveur sur Pterodactyl
+    if unsuspend_pterodactyl_server(server['pterodactyl_server_id']):
         flash("Votre serveur a bien été renouvelé")
     else:
         flash("Une erreur est survenue lors du renouvellement de votre serveur...")
-
+    
     del renew_tokens[token]
-
     return redirect(url_for('dashboard'))
 
-
-
-def check_server_availability():
-    conn = sqlite3.connect(DATABASE_PATH)
-    conn.row_factory = sqlite3.Row  
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM servers")
-    rows = cursor.fetchall()
-    servers = [dict(row) for row in rows]
-
-    now = time.time()
-
-    for server in servers:
-        if int(server['expires_at']) < int(now) and str(server['suspended']) != '1':
-            response = requests.post(
-                f"{PTERODACTYL_URL}/api/application/servers/{server['pterodactyl_server_id']}/suspend",
-                headers=PTERODACTYL_HEADERS
-            )
-            if response.status_code == 204:
-                print(f"Serveur {server['pterodactyl_server_id']} mis en maintenance")
-                cursor.execute(
-                    "UPDATE servers SET suspended = 1 WHERE id = ?",
-                    (server['id'],)
-                )
-                conn.commit()  
-
-    conn.close()
-
-@app.route('/server/<id>/delete')  
+@app.route('/server/<id>/delete')
+@login_required
 def delete_server(id):
     user_servers = get_user_servers(session['user_id'])
-
-    print(user_servers)
-    print(id)
-
     server = next((s for s in user_servers if s['pterodactyl_server_id'] == int(id)), None)
-
-    if server:      
-        response = requests.delete(
-            f"{PTERODACTYL_URL}/api/application/servers/{id}",
-            headers=PTERODACTYL_HEADERS
-        )
-        if response.status_code == 204:
-            conn = sqlite3.connect(DATABASE_PATH)
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM servers WHERE pterodactyl_server_id = ?", (id,))
-            conn.commit()
-            conn.close()
-
-            flash("Serveur supprimé avec succès")
-        else:
-            flash("Erreur lors de la suppresion du serveur")
-    else:
+    
+    if not server:
         flash("Serveur introuvable")
+        return redirect(url_for('dashboard'))
+    
+    # Supprimer le serveur sur Pterodactyl
+    if delete_pterodactyl_server(id):
+        delete_server_from_db(id)
+        flash("Serveur supprimé avec succès")
+    else:
+        flash("Erreur lors de la suppression du serveur")
+    
     return redirect(url_for('dashboard'))
 
-
-
+def check_server_availability():
+    """Vérifie et suspend les serveurs expirés"""
+    servers = execute_query("SELECT * FROM servers", fetch_all=True)
+    now = time.time()
+    
+    for server in servers:
+        if int(server['expires_at']) < int(now) and str(server['suspended']) != '1':
+            if suspend_pterodactyl_server(server['pterodactyl_server_id']):
+                print(f"Serveur {server['pterodactyl_server_id']} mis en maintenance")
+                update_server_status(server['id'], 1)
 
 @app.before_request
 def auto_task():
