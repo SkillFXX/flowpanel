@@ -92,7 +92,7 @@ def hash_password(password):
 
 def get_tier_by_id(tier_id):
     """Récupère un tier par son ID"""
-    conn = sqlite3.connect("pterodactyl_app.db")
+    conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute("SELECT * FROM tiers WHERE id = ?", (tier_id,))
@@ -101,7 +101,7 @@ def get_tier_by_id(tier_id):
     return dict(row) if row else None
 
 def get_all_tiers():
-    conn = sqlite3.connect("pterodactyl_app.db")
+    conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute("SELECT * FROM tiers")
@@ -191,8 +191,7 @@ def get_pterodactyl_eggs():
                         user_editable_variables = []
                         if 'variables' in egg['attributes']['relationships'] and 'data' in egg['attributes']['relationships']['variables']:
                             for var in egg['attributes']['relationships']['variables']['data']:
-                                if var['attributes'].get('user_editable', False):
-                                    user_editable_variables.append(var)
+                                user_editable_variables.append(var)
                         
                         eggs.append({
                             'id': egg['attributes']['id'],
@@ -570,7 +569,7 @@ def validate_renew():
 
     pterodactyl_server_uuid = record['pterodactyl_server_uuid']
 
-    with sqlite3.connect("pterodactyl_app.db") as conn:
+    with sqlite3.connect(DATABASE_PATH) as conn:
         cursor = conn.cursor()
 
         cursor.execute(
@@ -608,7 +607,7 @@ def validate_renew():
 
 
 def check_server_availability():
-    conn = sqlite3.connect("pterodactyl_app.db")
+    conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row  
     cursor = conn.cursor()
 
@@ -649,7 +648,7 @@ def delete_server(id):
             headers=PTERODACTYL_HEADERS
         )
         if response.status_code == 204:
-            conn = sqlite3.connect("pterodactyl_app.db")
+            conn = sqlite3.connect(DATABASE_PATH)
             cursor = conn.cursor()
             cursor.execute("DELETE FROM servers WHERE pterodactyl_server_id = ?", (id,))
             conn.commit()
