@@ -17,7 +17,7 @@ app = Flask(__name__)
 app.secret_key = os.getenv('APP_SECRET_KEY')
 
 PTERODACTYL_URL = os.getenv('PTERODACTYL_URL')
-PTERODACTYL_API_KEY = os.getenv('ptla_M1Vo0F36sab3rYEA0HEvWsFNSdYQkBz77B2WMVVZTHP')
+PTERODACTYL_API_KEY = os.getenv('PTERODACTYL_API_KEY')
 
 renew_tokens = {}
 
