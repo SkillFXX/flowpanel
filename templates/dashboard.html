@@ -23,25 +23,21 @@
         <thead>
             <tr>
                 <th>Nom du serveur</th>
-                <th>Liens associés</th>
+                <th>Tier du serveur</th>
                 <th>Expiration</th>
-                <th>Date de création</th>
+                <th>IP</th>
+                <th>Liens associés</th>
             </tr>
         </thead>
         <tbody>
             {% for server in servers %}
                 <tr>
                     <td>{{ server.server_name }}</td>
-                    <td>
-                        <a href="{{ url_for('server_infos', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="outline">
-                            Informations
-                        </a>
-                        <a href="{{ url_for('renew_server', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="outline secondary">
-                            Renouveler
-                        </a>
-                        <a href="{{ url_for('panel_redirect', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="outline contrast">
-                            Gérer
-                        </a>
+                    <td>{% for tier in tiers %}
+                            {% if tier.id == server.tier_id %}
+                            <code>{{ tier.name }}</code>
+                            {% endif %}
+                        {% endfor %}
                     </td>
                     <td>
                     {% set remaining = server.expires_at - now %}
@@ -53,9 +49,29 @@
                         {{ hours }}h {{ minutes }}m restantes
                     {% endif %}
                     </td>
+                    <td>
+                        <code>{% for server_details in servers_details %}   
+                                    {% if server_details.attributes.uuid == server.pterodactyl_server_uuid %}
+                                        {{ server_details.attributes.relationships.allocations.data[0].attributes.alias }}:{{ server_details.attributes.relationships.allocations.data[0].attributes.port }}
+                                    {% endif %}
+                                {% endfor %}
+                        </code>
+                            
+                            
+                            
+                    </td>
+                     <td>
+                        <a href="{{ url_for('server_infos', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="outline">
+                            Voir détails
+                        </a>
+                        <a href="{{ url_for('renew_server', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="outline secondary">
+                            Renouveler
+                        </a>
+                        <a href="{{ url_for('panel_redirect', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="outline contrast">
+                            Gérer
+                        </a>
+                    </td>
 
-
-                    <td>{{ server.created_at }}</td>
                 </tr>
             {% endfor %}
         </tbody>

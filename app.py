@@ -267,7 +267,7 @@ def get_available_allocation(node_id):
 
 def get_server_details(id):
     params = {
-            'include':'egg,location,node,databases,backups'
+            'include':'egg,location,node,databases,backups, allocations'
         }
 
     response = requests.get(
@@ -438,9 +438,21 @@ def logout():
 @login_required
 def dashboard():
     servers = get_user_servers(session['user_id'])
-    return render_template('dashboard.html', 
-                                username=session['username'], 
-                                servers=servers, now = round(time.time()))
+    servers_details = []
+    tiers = get_all_tiers()
+
+    for server in servers:
+        details = get_server_details(server['pterodactyl_server_id'])
+        servers_details.append(details)
+
+    return render_template(
+        'dashboard.html',
+        username=session['username'],
+        servers=servers,
+        servers_details=servers_details,
+        now=round(time.time()),
+        tiers=tiers
+    )
 
 @app.route('/server/<uuid>/manage')
 @login_required
