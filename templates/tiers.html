@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+
+{% block title %}Documentation des tiers{% endblock %}
+
+{% block content %}
+<h1>Liste des tiers</h1>
+    
+<div class="grid">
+    {% for tier in tiers %}
+    <article>
+    <h2>{{ tier.name }}</h2>
+    <ul>
+        <li><strong>CPU:</strong> {{ tier.cpu_limit }}%</li>
+        <li><strong>RAM:</strong> {{ tier.ram_limit }} MB</li>
+        <li><strong>Disk:</strong> {{ tier.disk_limit }} MB</li>
+        <li><strong>Databases:</strong> {{ tier.database_limit }}</li>
+        <li><strong>Backups:</strong> {{ tier.backup_limit }}</li>
+        <li><strong>Durée avant renouvellement:</strong> {{ tier.duration_hours }} hours</li>
+    </ul>
+    </article>
+    {% endfor %}
+</div>
+
+{% endblock %}

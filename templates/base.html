@@ -1,0 +1,97 @@
+<!DOCTYPE html>  
+<html>
+<head>
+    <title>{% block title %}FlowHost{% endblock %}</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
+    >
+    <style>
+        /* Overlay de chargement */
+        #loader-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            backdrop-filter: blur(5px); /* effet flou */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        #loader-overlay.active {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        article[aria-busy="true"] {
+            width: 60px;
+            height: 60px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Overlay de chargement -->
+    <div id="loader-overlay">
+        <div aria-busy="true"></div>
+    </div>
+
+    <main class="container">
+        <nav>
+            <ul>
+                <li><strong>FlowHost</strong></li>
+            </ul>
+            <ul>
+                <li><a href="{{ url_for('dashboard') }}" class="contrast nav-link">Accueil</a></li>
+                <li><a href="{{ url_for('create_server') }}" class="contrast nav-link">Nouveau serveur</a></li>
+                <li>
+                    <details class="dropdown">
+                        <summary>
+                        Compte
+                        </summary>
+                        <ul dir="rtl">
+                        <li><a href="#">Profil</a></li>
+                        <li><a href="#">Paramètres</a></li>
+                        <li><a href="#">Historique</a></li>
+                        <li><a href="{{ url_for('logout') }}">Se déconnecter</a></li>
+                        </ul>
+                    </details>
+                </li>
+            </ul>
+        </nav>
+        <hr>
+        {% block content %}<p>N/A</p>{% endblock %}
+    </main>
+
+    {% block javascript %}
+    <script>
+        // Fonction pour afficher l'overlay
+        function showLoader() {
+            document.getElementById('loader-overlay').classList.add('active');
+        }
+
+        // Ajouter le loader sur les liens internes
+        document.querySelectorAll('a.nav-link').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const href = this.href;
+                showLoader();
+                setTimeout(() => {
+                    window.location.href = href;
+                }, 300);
+            });
+        });
+
+        // Affiche le loader si la page se recharge
+        window.addEventListener('beforeunload', function () {
+            showLoader();
+        });
+    </script>
+    {% endblock %}
+</body>
+</html>

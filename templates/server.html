@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+
+{% block title %}Gerer le serveur{% endblock %}
+
+{% block content %}
+
+<header class="container">
+    <nav>
+        <ul>
+            <li>
+                <h2>{{ server_details.attributes.name }}</h2>
+                <kbd>{{ server_details.attributes.relationships.egg.attributes.name }}</kbd>
+            </li>
+        </ul>
+        <ul>
+            <li>
+                <a href="{{ url_for('panel_redirect', uuid=server.pterodactyl_server_uuid|string) }}" role="button">Gérer</a>
+                <a href="{{ url_for('renew_server', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="secondary">Renouveler</a>
+            </li>
+            <li>
+                {% if server_details.attributes.suspended %}
+                    <mark>Suspendu</mark>
+                {% elif server_details.attributes.status %}
+                    <ins>{{ server_details.attributes.status }}</ins>
+                {% else %}
+                    <del>État inconnu</del>
+                {% endif %}
+            </li>
+        </ul>
+    </nav>
+</header>
+
+{% with messages = get_flashed_messages() %}
+    {% if messages %}
+        <ul>
+            {% for message in messages %}
+                <li style="color: red;">{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+{% endwith %}
+
+<section>
+    <div class="grid">
+        <article>
+            <header><strong>{{ server_details.attributes.limits.memory }} MB</strong></header>
+            RAM
+        </article>
+        <article>
+            <header><strong>{{ (server_details.attributes.limits.disk / 1000)|round(1) }} GB</strong></header>
+            Disque
+        </article>
+        <article>
+            <header><strong>{{ server_details.attributes.limits.cpu }}%</strong></header>
+            CPU
+        </article>
+        {% for tier in tiers %}
+            {% if tier.id == server.tier_id %}
+            <article>
+                <header><strong>{{ tier.duration_hours }}h</strong></header>
+                Durée
+            </article>
+            {% endif %}
+        {% endfor %}
+    </div>
+</section>
+
+<!-- Informations essentielles -->
+<section>
+    <div class="grid">
+        <div>
+            <h4>Plan</h4>
+            {% for tier in tiers %}
+                {% if tier.id == server.tier_id %}
+                <p><code>{{ tier.name }}</code></p>
+                {% endif %}
+            {% endfor %}
+        </div>
+        
+        <div>
+            <h4>Localisation</h4>
+            <p>{{ server_details.attributes.relationships.location.attributes.long }}</p>
+        </div>
+        
+        <div>
+            <h4>Node</h4>
+            <p>{{ server_details.attributes.relationships.node.attributes.name }}</p>
+        </div>
+    </div>
+    
+    <div class="grid">
+        <div>
+            <h4>Créé le</h4>
+            <p><time>{{ server.created_at[:10] }}</time></p>
+        </div>
+        
+        <div>
+            <h4>Renouvellement</h4>
+            <p>
+                {% if server.expires_at %}
+                     {% for tier in tiers %}
+                        {% if tier.id == server.tier_id %}
+                            Toutes les {{ tier.duration_hours }} heures
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    Jamais
+                {% endif %}
+            </p>
+        </div>
+        
+        <div>
+            <h4>ID Serveur</h4>
+            <p><kbd>{{ server_details.attributes.identifier }}</kbd></p>
+        </div>
+    </div>
+</section>
+
+<!-- Limites fonctionnelles -->
+<section>
+    <article>
+        <header>
+            <h3>Limites & Fonctionnalités</h3>
+        </header>
+        <div class="grid">
+            <div>
+                <h5>{{ server_details.attributes.feature_limits.databases }}</h5>
+                <small>Bases de données</small>
+            </div>
+            <div>
+                <h5>{{ server_details.attributes.feature_limits.backups }}</h5>
+                <small>Sauvegardes</small>
+            </div>
+            <div>
+                <h5>{{ server_details.attributes.feature_limits.allocations }}</h5>
+                <small>Allocations</small>
+            </div>
+            <div>
+                <h5>{{ server_details.attributes.limits.io }}</h5>
+                <small>Poids I/O</small>
+            </div>
+        </div>
+    </article>
+</section>
+
+<!-- État du nœud -->
+<details>
+    <summary>Détails du nœud {{ server_details.attributes.relationships.node.attributes.name }}</summary>
+    <div class="grid">
+        <div>
+            <p><strong>FQDN:</strong> <code>{{ server_details.attributes.relationships.node.attributes.fqdn }}</code></p>
+            <p><strong>Ressources totales:</strong> {{ server_details.attributes.relationships.node.attributes.memory }}MB RAM, {{ (server_details.attributes.relationships.node.attributes.disk / 1000)|round }}GB disque</p>
+        </div>
+        <div>
+            <p><strong>Déjà alloué:</strong> {{ server_details.attributes.relationships.node.attributes.allocated_resources.memory }}MB RAM</p>
+            <p><strong>Utilisation:</strong> 
+                <progress value="{{ server_details.attributes.relationships.node.attributes.allocated_resources.memory }}" max="{{ server_details.attributes.relationships.node.attributes.memory }}"></progress>
+                {{ (server_details.attributes.relationships.node.attributes.allocated_resources.memory / server_details.attributes.relationships.node.attributes.memory * 100)|round }}%
+            </p>
+            <p><strong>Maintenance:</strong> 
+                {% if server_details.attributes.relationships.node.attributes.maintenance_mode %}
+                    <mark>Oui</mark>
+                {% else %}
+                    Non
+                {% endif %}
+            </p>
+        </div>
+    </div>
+</details>
+
+<a href="{{ url_for('delete_server', id=server.pterodactyl_server_id) }}" role="button">Supprimer le serveur</a>
+{% endblock %}

@@ -1,0 +1,42 @@
+
+{% extends 'base.html' %}
+
+{% block title %}Inscription - Pterodactyl Manager{% endblock %}
+
+{% block content %}
+
+<h1>Créer un compte</h1>
+
+{% with messages = get_flashed_messages() %}
+    {% if messages %}
+        <ul>
+            {% for message in messages %}
+                <li style="color: red;">{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+{% endwith %}
+
+<form method="POST">
+    <p>
+        <label>Nom d'utilisateur:</label><br>
+        <input type="text" name="username" required>
+    </p>
+    
+    <p>
+        <label>Email:</label><br>
+        <input type="email" name="email" required>
+    </p>
+    
+    <p>
+        <label>Mot de passe:</label><br>
+        <input type="password" name="password" required>
+    </p>
+    
+    <p>
+        <input type="submit" value="Créer le compte">
+    </p>
+</form>
+
+<p><a href="{{ url_for('index') }}">Retour à l'accueil</a></p>
+{% endblock %}

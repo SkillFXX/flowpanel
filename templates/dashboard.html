@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+
+{% block title %}Tableau de bord - Pterodactyl Manager{% endblock %}
+
+{% block content %}
+
+<h1>Bienvenue, {{ username }} 👋</h1>
+
+{% with messages = get_flashed_messages() %}
+    {% if messages %}
+        {% for message in messages %}
+            <article role="alert">
+                {{ message }}
+            </article>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<h2>Vos serveurs</h2>
+
+{% if servers %}
+    <table>
+        <thead>
+            <tr>
+                <th>Nom du serveur</th>
+                <th>Liens associés</th>
+                <th>Expiration</th>
+                <th>Date de création</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for server in servers %}
+                <tr>
+                    <td>{{ server.server_name }}</td>
+                    <td>
+                        <a href="{{ url_for('server_infos', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="outline">
+                            Informations
+                        </a>
+                        <a href="{{ url_for('renew_server', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="outline secondary">
+                            Renouveler
+                        </a>
+                        <a href="{{ url_for('panel_redirect', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="outline contrast">
+                            Gérer
+                        </a>
+                    </td>
+                    <td>
+                    {% set remaining = server.expires_at - now %}
+                    {% if remaining <= 0 %}
+                        <span style="color: red;">Expiré, renouvellement requis</span>
+                    {% else %}
+                        {% set hours = remaining // 3600 %}
+                        {% set minutes = (remaining % 3600) // 60 %}
+                        {{ hours }}h {{ minutes }}m restantes
+                    {% endif %}
+                    </td>
+
+
+                    <td>{{ server.created_at }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p>
+        Vous n'avez encore aucun serveur.<br>
+        <a href="{{ url_for('create_server') }}" role="button">🚀 Créer votre premier serveur</a>
+    </p>
+{% endif %}
+
+{% endblock %}

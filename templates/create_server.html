@@ -1,0 +1,195 @@
+{% extends 'base.html' %}
+
+{% block title %} Créer un serveur - Pterodactyl Manager{% endblock %}
+
+{% block content %}
+<main class="container">
+    <h1>Créer un nouveau serveur</h1>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <article role="alert">{{ message }}</article>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <form method="POST" id="createServer">
+        <div class="grid">
+            <div>
+                <label for="server_name">Nom du serveur:</label>
+                <input type="text" id="server_name" name="server_name" required placeholder="Entrez le nom de votre serveur">
+            </div>
+        </div>
+        
+        <div class="grid">
+            <div>
+                <label for="node_id">Nœud:</label>
+                <select id="node_id" name="node_id" required>
+                    <option value="">Sélectionner un nœud</option>
+                    {% for node in nodes %}
+                        <option value="{{ node.attributes.id }}">
+                            {{ node.attributes.name }} (Location: {{ node.attributes.relationships.location.attributes.long }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div>
+                <label for="tier_id">Puissance du serveur <a href="/docs/tiers">(Voir plus)</a></label>
+                <select id="tier_id" name="tier_id" required>
+                    <option value="">Sélectionner un tier</option>
+                    {% for tier in tiers %}
+                        <option value="{{ tier.id }}">
+                            {{ tier.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        
+        <div class="grid">
+            <div>
+                <label for="egg_select">Type de serveur (Egg):</label>
+                <select id="egg_select" name="egg_id" required>
+                    <option value="">Sélectionner un type</option>
+                    {% for egg in eggs %}
+                        <option value="{{ egg.id }}">{{ egg.name }} ({{ egg.nest }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        
+        <!-- Conteneur des champs dynamiques -->
+        <section id="egg_variables_container" style="display: none;">
+            <h3>Configuration du serveur</h3>
+            <div id="egg_variables"></div>
+        </section>
+        
+        <button type="submit" class="secondary" id="submitBtn">Créer le serveur</button>
+    </form>
+
+    <p><a href="{{ url_for('dashboard') }}" role="button" class="outline">← Retour au tableau de bord</a></p>
+</main>
+
+<script>
+    // On injecte les eggs en JSON pour le JS
+    const eggs = {{ eggs|tojson }};
+    const eggSelect = document.getElementById("egg_select");
+    const eggVariablesContainer = document.getElementById("egg_variables");
+    const eggVariablesSection = document.getElementById("egg_variables_container");
+
+    function renderVariables(eggId) {
+        eggVariablesContainer.innerHTML = ""; // reset
+        
+        if (!eggId) {
+            eggVariablesSection.style.display = "none";
+            return;
+        }
+
+        const selectedEgg = eggs.find(e => e.id == eggId);
+        if (!selectedEgg || !selectedEgg.variables || !selectedEgg.variables.data || selectedEgg.variables.data.length === 0) {
+            eggVariablesContainer.innerHTML = '<p><em>Aucune configuration supplémentaire requise pour ce type de serveur.</em></p>';
+            eggVariablesSection.style.display = "block";
+            return;
+        }
+
+        eggVariablesSection.style.display = "block";
+
+        selectedEgg.variables.data.forEach(variable => {
+            const attr = variable.attributes;
+            
+            // Créer un article PicoCSS pour chaque variable
+            const article = document.createElement("article");
+
+            // Header avec nom et badge
+            const header = document.createElement("header");
+            const title = document.createElement("h5");
+            
+            const isRequired = attr.rules && attr.rules.includes("required");
+            const badgeText = isRequired ? "REQUIS" : "OPTIONNEL";
+            const badgeClass = isRequired ? "contrast" : "secondary";
+            
+            title.innerHTML = `${attr.name || attr.env_variable} <small><mark class="${badgeClass}">${badgeText}</mark></small>`;
+            header.appendChild(title);
+            article.appendChild(header);
+
+            // Description
+            if (attr.description) {
+                const description = document.createElement("p");
+                description.innerHTML = `<em>${attr.description}</em>`;
+                article.appendChild(description);
+            }
+
+            // Groupe de champ
+            const fieldset = document.createElement("fieldset");
+            
+            const label = document.createElement("label");
+            label.textContent = `Valeur pour ${attr.env_variable}:`;
+            fieldset.appendChild(label);
+
+            // Input
+            const input = document.createElement("input");
+            input.type = "text";
+            input.name = `env[${attr.env_variable}]`;
+            input.value = attr.default_value || "";
+            input.placeholder = `Entrez la valeur pour ${attr.env_variable}`;
+
+            if (isRequired) {
+                input.required = true;
+            }
+
+            // Validation des règles
+            if (attr.rules) {
+                if (attr.rules.includes("numeric")) {
+                    input.type = "number";
+                }
+                if (attr.rules.includes("email")) {
+                    input.type = "email";
+                }
+                if (attr.rules.includes("url")) {
+                    input.type = "url";
+                }
+                
+                // Extraction des règles min/max
+                const minMatch = attr.rules.match(/min:(\d+)/);
+                const maxMatch = attr.rules.match(/max:(\d+)/);
+                
+                if (input.type === "number") {
+                    if (minMatch) input.min = minMatch[1];
+                    if (maxMatch) input.max = maxMatch[1];
+                } else {
+                    if (minMatch) input.minLength = minMatch[1];
+                    if (maxMatch) input.maxLength = maxMatch[1];
+                }
+            }
+
+            fieldset.appendChild(input);
+            article.appendChild(fieldset);
+            
+            eggVariablesContainer.appendChild(article);
+        });
+    }
+
+    eggSelect.addEventListener("change", (e) => {
+        renderVariables(e.target.value);
+    });
+</script>
+<script>
+const form = document.getElementById('createServer')
+const submitBtn = document.getElementById('submitBtn');
+
+form.addEventListener('submit', function(event) {
+    event.preventDefault();
+
+    submitBtn.setAttribute('aria-busy', 'true');
+    submitBtn.disabled = true;
+
+    setTimeout(() => {
+        form.submit(); 
+    }, 50); 
+});
+</script>
+{% endblock %}
