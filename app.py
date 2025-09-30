@@ -18,6 +18,7 @@ app.secret_key = os.getenv('APP_SECRET_KEY')
 
 PTERODACTYL_URL = os.getenv('PTERODACTYL_URL')
 PTERODACTYL_API_KEY = os.getenv('PTERODACTYL_API_KEY')
+DATABASE_PATH = os.getenv('SQLITE_DATABASE_PATH')
 
 renew_tokens = {}
 
@@ -30,7 +31,7 @@ PTERODACTYL_HEADERS = {
 
 def init_db():
     """Initialise la base de données"""
-    conn = sqlite3.connect('pterodactyl_app.db')
+    conn = sqlite3.connect(DATABASE_PATH)
     c = conn.cursor()
     
     # Table des utilisateurs
@@ -332,7 +333,7 @@ def create_pterodactyl_server(user_pterodactyl_id, server_name, egg_id, node_id,
 
 def get_user_servers(user_id):
     """Récupère tous les serveurs d'un utilisateur (toutes les colonnes)"""
-    conn = sqlite3.connect('pterodactyl_app.db')
+    conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row  # permet un dict propre
     c = conn.cursor()
     
@@ -365,7 +366,7 @@ def register():
             flash('Tous les champs sont obligatoires')
             return render_template('register.html')
         
-        conn = sqlite3.connect('pterodactyl_app.db')
+        conn = sqlite3.connect(DATABASE_PATH)
         c = conn.cursor()
         
         # Vérifier si l'utilisateur existe déjà
@@ -404,7 +405,7 @@ def login():
         username = request.form['username']
         password = request.form['password']
         
-        conn = sqlite3.connect('pterodactyl_app.db')
+        conn = sqlite3.connect(DATABASE_PATH)
         c = conn.cursor()
         
         password_hash = hash_password(password)
@@ -495,7 +496,7 @@ def create_server():
             return redirect(url_for('create_server'))
         
         # Enregistrer le serveur dans la base de données
-        conn = sqlite3.connect('pterodactyl_app.db')
+        conn = sqlite3.connect(DATABASE_PATH)
         c = conn.cursor()
         
         c.execute('''
