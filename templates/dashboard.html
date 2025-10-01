@@ -4,83 +4,72 @@
 
 {% block content %}
 
-<h1>Bienvenue, {{ username }} 👋</h1>
+<header>
+  <h1>Bienvenue, {{ username }} 👋</h1>
+</header>
 
-{% with messages = get_flashed_messages() %}
-    {% if messages %}
-        {% for message in messages %}
-            <article role="alert">
-                {{ message }}
-            </article>
-        {% endfor %}
-    {% endif %}
-{% endwith %}
+<section>
+  <h2>Vos serveurs</h2>
 
-<h2>Vos serveurs</h2>
-
-{% if servers %}
+  {% if servers %}
     <table>
-        <thead>
-            <tr>
-                <th>Nom du serveur</th>
-                <th>Tier du serveur</th>
-                <th>Expiration</th>
-                <th>IP</th>
-                <th>Liens associés</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for server in servers %}
-                <tr>
-                    <td>{{ server.server_name }}</td>
-                    <td>{% for tier in tiers %}
-                            {% if tier.id == server.tier_id %}
-                            <code>{{ tier.name }}</code>
-                            {% endif %}
-                        {% endfor %}
-                    </td>
-                    <td>
-                    {% set remaining = server.expires_at - now %}
-                    {% if remaining <= 0 %}
-                        <span style="color: red;">Expiré, renouvellement requis</span>
-                    {% else %}
-                        {% set hours = remaining // 3600 %}
-                        {% set minutes = (remaining % 3600) // 60 %}
-                        {{ hours }}h {{ minutes }}m restantes
-                    {% endif %}
-                    </td>
-                    <td>
-                        <code>{% for server_details in servers_details %}   
-                                    {% if server_details.attributes.uuid == server.pterodactyl_server_uuid %}
-                                        {{ server_details.attributes.relationships.allocations.data[0].attributes.alias }}:{{ server_details.attributes.relationships.allocations.data[0].attributes.port }}
-                                    {% endif %}
-                                {% endfor %}
-                        </code>
-                            
-                            
-                            
-                    </td>
-                     <td>
-                        <a href="{{ url_for('server_infos', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="outline">
-                            Voir détails
-                        </a>
-                        <a href="{{ url_for('renew_server', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="outline secondary">
-                            Renouveler
-                        </a>
-                        <a href="{{ url_for('panel_redirect', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="outline contrast">
-                            Gérer
-                        </a>
-                    </td>
-
-                </tr>
-            {% endfor %}
-        </tbody>
+      <thead>
+        <tr>
+          <th>Nom</th>
+          <th>Tier</th>
+          <th>Expiration</th>
+          <th>Adresse</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for server in servers %}
+          <tr>
+            <td><strong>{{ server.server_name }}</strong></td>
+            <td>
+              {% for tier in tiers %}
+                {% if tier.id == server.tier_id %}
+                  <kbd>{{ tier.name }}</kbd>
+                {% endif %}
+              {% endfor %}
+            </td>
+            <td>
+              {% set remaining = server.expires_at - now %}
+              {% if remaining <= 0 %}
+                <mark class="secondary">Expiré</mark><br>
+                <small>Renouvellement requis</small>
+              {% else %}
+                {% set hours = remaining // 3600 %}
+                {% set minutes = (remaining % 3600) // 60 %}
+                <small>{{ hours }}h {{ minutes }}m restantes</small>
+              {% endif %}
+            </td>
+            <td>
+              {% for server_details in servers_details %}
+                {% if server_details.attributes.uuid == server.pterodactyl_server_uuid %}
+                  <code>{{ server_details.attributes.relationships.allocations.data[0].attributes.alias }}:{{ server_details.attributes.relationships.allocations.data[0].attributes.port }}</code>
+                {% endif %}
+              {% endfor %}
+            </td>
+            <td>
+              <nav>
+                <ul>
+                  <li><a href="{{ url_for('server_infos', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="secondary">Détails</a></li>
+                  <li><a href="{{ url_for('renew_server', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="contrast">Renouveler</a></li>
+                  <li><a href="{{ url_for('panel_redirect', uuid=server.pterodactyl_server_uuid|string) }}" role="button">Gérer</a></li>
+                </ul>
+              </nav>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
     </table>
-{% else %}
-    <p>
-        Vous n'avez encore aucun serveur.<br>
-        <a href="{{ url_for('create_server') }}" role="button">🚀 Créer votre premier serveur</a>
-    </p>
-{% endif %}
+  {% else %}
+    <article>
+      <p>Vous n'avez encore aucun serveur.</p>
+      <a href="{{ url_for('create_server') }}" role="button">🚀 Créer votre premier serveur</a>
+    </article>
+  {% endif %}
+</section>
 
 {% endblock %}

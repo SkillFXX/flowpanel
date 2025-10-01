@@ -1,25 +1,109 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FlowHost - Hébergement de serveurs 100% gratuit pour tous vos projets. Jeux, développement, bases de données et plus encore.">
+    <title>FlowHost - Hébergement de Serveurs Gratuit & Illimité</title>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    
+    <style>
+        :root {
+            --pico-font-size: 100%; /* Ajuste la taille de la police de base si nécessaire */
+        }
+        .hero {
+            text-align: center;
+            padding: 5rem 1rem;
+        }
+        .hero h1 {
+            font-size: 3.5rem; /* Taille du titre principal */
+            font-weight: 800;
+        }
+        .hero p {
+            font-size: 1.25rem;
+            color: var(--pico-secondary);
+        }
+        section {
+            padding: 3rem 0;
+        }
+        .feature-card {
+            border: 1px solid var(--pico-contrast-border);
+            border-radius: var(--pico-border-radius);
+            padding: 2rem;
+            text-align: center;
+            height: 100%;
+        }
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            border-top: 1px solid var(--pico-form-element-border-color);
+            margin-top: 4rem;
+        }
+        .icon {
+             width: 48px;
+             height: 48px;
+             margin-bottom: 1rem;
+             stroke-width: 1.5;
+             color: var(--pico-primary);
+        }
+    </style>
+</head>
 
-{% extends 'base.html' %}
+<body>
 
-{% block title %}Pterodactyl Manager{% endblock %}
+    <header class="container">
+        <nav>
+            <ul>
+                <li><strong><a href="#" class="contrast">FlowHost</a></strong></li>
+            </ul>
+            <ul>
+                <li><a href="/dashboard" role="button" class="outline">Espace Client</a></li>
+            </ul>
+        </nav>
+    </header>
 
-{% block content %}
-<h1>Bienvenue sur Pterodactyl Manager</h1>
+    <main class="container">
 
-{% with messages = get_flashed_messages() %}
-    {% if messages %}
-        <ul>
-            {% for message in messages %}
-                <li style="color: green;">{{ message }}</li>
-            {% endfor %}
-        </ul>
-    {% endif %}
-{% endwith %}
+        <section class="hero">
+            <hgroup>
+                <h1>Votre Serveur. Vos Projets. Zéro Euro.</h1>
+                <p>Lancez des serveurs pour vos jeux, vos développements ou vos bases de données en quelques clics. Entièrement gratuit.</p>
+            </hgroup>
+            <a href="/dashboard" role="button" class="primary">Créer mon premier serveur</a>
+        </section>
 
-<p>Gérez vos serveurs Pterodactyl facilement</p>
+        <section id="features">
+            <div class="grid">
+                <article class="feature-card">
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
+                    <h3>Polyvalence Totale</h3>
+                    <p>Minecraft, bots Discord, sites web, bases de données... Si vous pouvez le lancer, nous pouvons l'héberger. Parfait pour expérimenter.</p>
+                </article>
+                
+                <article class="feature-card">
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>
+                    <h3>Serveurs à Volonté</h3>
+                    <p>Aucune limite sur le nombre de serveurs que vous pouvez créer. Testez autant d'idées que vous le souhaitez, simultanément.</p>
+                </article>
 
-<p>
-    <a href="{{ url_for('register') }}">Créer un compte</a> |
-    <a href="{{ url_for('login') }}">Se connecter</a>
-</p>
-{% endblock %}
+                <article class="feature-card">
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><path d="m15 3 6 6"></path><path d="M15 3h6v6"></path></svg>
+                    <h3>Hébergé en France</h3>
+                    <p>Profitez d'une connexion ultra-rapide et d'une faible latence grâce à nos serveurs situés au cœur de la France.</p>
+                </article>
+            </div>
+        </section>
+
+    </main>
+
+    <footer>
+        <small>
+            © 2025 FlowHost - Tous droits réservés.
+            <br>
+            <a href="#">Conditions d'utilisation</a> • <a href="#">Politique de confidentialité</a> • <a href="#">Notre Discord</a>
+        </small>
+    </footer>
+
+</body>
+</html>

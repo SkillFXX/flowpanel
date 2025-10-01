@@ -1,123 +1,81 @@
 {% extends 'base.html' %}
 
-{% block title %}Gerer le serveur{% endblock %}
+{% block title %}Gérer le serveur{% endblock %}
 
 {% block content %}
 
-{% with messages = get_flashed_messages() %}
-    {% if messages %}
-        <ul>
-            {% for message in messages %}
-                <li style="color: red;">{{ message }}</li>
-            {% endfor %}
-        </ul>
-    {% endif %}
-{% endwith %}
-
-
 <header class="container">
-    <nav>
-        <ul>
-            <li>
-                <h2>{{ server_details.attributes.name }}</h2>
-                <kbd>{{ server_details.attributes.relationships.egg.attributes.name }}</kbd>
-            </li>
-            <li>
-                <h4><code>{{ server_details.attributes.relationships.allocations.data[0].attributes.alias }}:{{ server_details.attributes.relationships.allocations.data[0].attributes.port }}</code></h4>
-            </li>
-        </ul>
-        <ul>
-            {% set remaining = server.expires_at - now %}
-                    {% if remaining <= 0 %}
-                    <li>
-                        <span style="color: red;">Expiré, renouvellement requis</span>
-                    </li>
-                    <li>
-                        <a href="{{ url_for('panel_redirect', uuid=server.pterodactyl_server_uuid|string) }}" role="button" aria-disabled="true" disabled>Gérer</a>
-                        <a href="{{ url_for('renew_server', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="secondary">Renouveler</a>
-                    </li>
-                    {% else %}
-                    <li>
-                        {% set hours = remaining // 3600 %}
-                        {% set minutes = (remaining % 3600) // 60 %}
-                        {{ hours }}h {{ minutes }}m restantes
-                    </li>
-                    <li>
-                        <a href="{{ url_for('panel_redirect', uuid=server.pterodactyl_server_uuid|string) }}" role="button">Gérer</a>
-                        <a href="{{ url_for('renew_server', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="secondary">Renouveler</a>
-                    </li>
-            {% endif %}
-        </ul>
-    </nav>
+  <nav>
+    <ul>
+      <li>
+        <h2>{{ server_details.attributes.name }}</h2>
+        <kbd>{{ server_details.attributes.relationships.egg.attributes.name }}</kbd>
+      </li>
+      <li>
+        <small>
+          <code>{{ server_details.attributes.relationships.allocations.data[0].attributes.alias }}:{{ server_details.attributes.relationships.allocations.data[0].attributes.port }}</code>
+        </small>
+      </li>
+    </ul>
+    <ul>
+      {% set remaining = server.expires_at - now %}
+      {% if remaining <= 0 %}
+        <li><mark class="secondary">Expiré</mark></li>
+        <li>
+          <a role="button" disabled aria-disabled="true">Gérer</a>
+          <a href="{{ url_for('renew_server', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="contrast">Renouveler</a>
+        </li>
+      {% else %}
+        <li>
+          {% set hours = remaining // 3600 %}
+          {% set minutes = (remaining % 3600) // 60 %}
+          <small>{{ hours }}h {{ minutes }}m restantes</small>
+        </li>
+        <li>
+          <a href="{{ url_for('panel_redirect', uuid=server.pterodactyl_server_uuid|string) }}" role="button">Gérer</a>
+          <a href="{{ url_for('renew_server', uuid=server.pterodactyl_server_uuid|string) }}" role="button" class="secondary">Renouveler</a>
+        </li>
+      {% endif %}
+    </ul>
+  </nav>
 </header>
 
 <section>
-    <div>
-            <h4>Votre plan</h4>
-            {% for tier in tiers %}
-                {% if tier.id == server.tier_id %}
-                <p><code>{{ tier.name }}</code></p>
-                {% endif %}
-            {% endfor %}
-        </div>
-    <h2>Ressources incluses</h2>
-    <div class="grid">
-        <article>
-            <header><strong>{{ server_details.attributes.limits.memory }} MB</strong></header>
-            RAM
-        </article>
-        <article>
-            <header><strong>{{ (server_details.attributes.limits.disk / 1000)|round(1) }} GB</strong></header>
-            Disque
-        </article>
-        <article>
-            <header><strong>{{ server_details.attributes.limits.cpu }}%</strong></header>
-            CPU
-        </article>
-    </div>
-      <div class="grid">
-        <article>
-            <header><strong>{{ server_details.attributes.feature_limits.databases }}</strong></header>
-            Base de données
-        </article>
-        <article>
-            <header><strong>{{ server_details.attributes.feature_limits.backups }}</strong></header>
-            Backups
-        </article>
-        <article>
-            <header><strong></strong>{{ server_details.attributes.feature_limits.allocations }}</strong></header>
-            Allocations
-        </article>
-        <article>
-            <header><strong>{{ server_details.attributes.limits.io }}</strong></header>
-            Poids I/O
-        </article>
+  <h3>Votre plan</h3>
+  {% for tier in tiers %}
+    {% if tier.id == server.tier_id %}
+      <p><kbd>{{ tier.name }}</kbd></p>
+    {% endif %}
+  {% endfor %}
 
-    </div>
+  <h3>Ressources incluses</h3>
+  <div class="grid">
+    <article><header><strong>{{ server_details.attributes.limits.memory }} MB</strong></header>RAM</article>
+    <article><header><strong>{{ (server_details.attributes.limits.disk / 1000)|round(1) }} GB</strong></header>Disque</article>
+    <article><header><strong>{{ server_details.attributes.limits.cpu }}%</strong></header>CPU</article>
+  </div>
+
+  <div class="grid">
+    <article><header><strong>{{ server_details.attributes.feature_limits.databases }}</strong></header>Bases de données</article>
+    <article><header><strong>{{ server_details.attributes.feature_limits.backups }}</strong></header>Backups</article>
+    <article><header><strong>{{ server_details.attributes.feature_limits.allocations }}</strong></header>Allocations</article>
+    <article><header><strong>{{ server_details.attributes.limits.io }}</strong></header>I/O</article>
+  </div>
 </section>
 
-
-
-
-<!-- État du nœud -->
 <details>
-    <summary>Stats pour les nerds </summary>
-    <p>Node : {{ server_details.attributes.relationships.node.attributes.name }}</p>
-    <p>Localisation : {{ server_details.attributes.relationships.location.attributes.long }}</p>
-    <p>Créer le {{ server.created_at[:10] }}</p>
-    <p>ID Serveur : {{ server_details.attributes.identifier }}</p>
-    <p>FQDN : {{ server_details.attributes.relationships.node.attributes.fqdn }}</p>
-    <p>Maintenance {% if server_details.attributes.relationships.node.attributes.maintenance_mode %}
-                    <mark>Oui</mark>
-                {% else %}
-                    Non
-                {% endif %}</p>
+  <summary>⚙️ Infos techniques</summary>
+  <p><strong>Node :</strong> {{ server_details.attributes.relationships.node.attributes.name }}</p>
+  <p><strong>Localisation :</strong> {{ server_details.attributes.relationships.location.attributes.long }}</p>
+  <p><strong>Créé le :</strong> {{ server.created_at[:10] }}</p>
+  <p><strong>ID Serveur :</strong> {{ server_details.attributes.identifier }}</p>
+  <p><strong>FQDN :</strong> {{ server_details.attributes.relationships.node.attributes.fqdn }}</p>
+  <p><strong>Maintenance :</strong> {% if server_details.attributes.relationships.node.attributes.maintenance_mode %}<mark>Oui</mark>{% else %}Non{% endif %}</p>
 </details>
 
 <div class="grid">
-<a href="{{ url_for('delete_server', id=server.pterodactyl_server_id) }}" role="button" class="secondary">Supprimer le serveur</a>
-<a href="{{ url_for('delete_server', id=server.pterodactyl_server_id) }}" role="button">Renommer le serveur</a>
-
-
+  <a href="{{ url_for('delete_server', id=server.pterodactyl_server_id) }}" role="button" class="secondary">🗑 Supprimer</a>
+  <a href="{{ url_for('delete_server', id=server.pterodactyl_server_id) }}" role="button">✏️ Renommer</a>
 </div>
+
 {% endblock %}

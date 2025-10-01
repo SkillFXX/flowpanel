@@ -33,7 +33,46 @@
             width: 60px;
             height: 60px;
         }
-    </style>
+        
+        :root {
+            --pico-font-size: 100%; /* Ajuste la taille de la police de base si nécessaire */
+        }
+        .hero {
+            text-align: center;
+            padding: 5rem 1rem;
+        }
+        .hero h1 {
+            font-size: 3.5rem; /* Taille du titre principal */
+            font-weight: 800;
+        }
+        .hero p {
+            font-size: 1.25rem;
+            color: var(--pico-secondary);
+        }
+        section {
+            padding: 3rem 0;
+        }
+        .feature-card {
+            border: 1px solid var(--pico-contrast-border);
+            border-radius: var(--pico-border-radius);
+            padding: 2rem;
+            text-align: center;
+            height: 100%;
+        }
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            border-top: 1px solid var(--pico-form-element-border-color);
+            margin-top: 4rem;
+        }
+        .icon {
+                width: 48px;
+                height: 48px;
+                margin-bottom: 1rem;
+                stroke-width: 1.5;
+                color: var(--pico-primary);
+        }
+</style>
 </head>
 <body>
     <!-- Overlay de chargement -->
@@ -65,8 +104,23 @@
             </ul>
         </nav>
         <hr>
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                <article role="alert">{{ message }}</article>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
         {% block content %}<p>N/A</p>{% endblock %}
     </main>
+    <footer>
+        <small>
+            © 2025 FlowHost - Tous droits réservés.
+            <br>
+            <a href="#">Conditions d'utilisation</a> • <a href="#">Politique de confidentialité</a> • <a href="#">Notre Discord</a>
+        </small>
+    </footer>
 
     {% block javascript %}
    <script>
