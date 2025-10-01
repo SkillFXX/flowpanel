@@ -108,7 +108,20 @@ def init_db():
             FOREIGN KEY (tier_id) REFERENCES tiers (id)
         )
     ''')
-    
+
+    # Table de l'historique
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        category TEXT NOT NULL,
+        action TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    ''')
+
     conn.commit()
     conn.close()
 
@@ -231,7 +244,7 @@ def get_pterodactyl_eggs():
         if eggs_response and eggs_response.status_code == 200:
             nest_eggs = eggs_response.json()['data']
             for egg in nest_eggs:
-                # Filtrer les variables pour ne garder que celles modifiables par l'utilisateur
+
                 user_editable_variables = []
                 if 'variables' in egg['attributes']['relationships'] and 'data' in egg['attributes']['relationships']['variables']:
                     user_editable_variables = egg['attributes']['relationships']['variables']['data']
@@ -397,6 +410,12 @@ def register():
         )
         
         if existing_user:
+            execute_query(
+                'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+                (None, 'user', 'register', 'failed'),
+                commit=True
+            )
+             
             flash('Nom d\'utilisateur ou email déjà utilisé')
             return render_template('register.html')
         
@@ -404,7 +423,14 @@ def register():
         pterodactyl_user_id = create_pterodactyl_user(username, email, password)
         
         if not pterodactyl_user_id:
-            flash('Erreur lors de la création du compte Pterodactyl')
+            flash('Erreur lors de la création du compte')
+            
+            # Ajouter l'action échouée dans l'historique
+            execute_query(
+                'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+                (None, 'user', 'register', 'failed'),  
+                commit=True
+            )
             return render_template('register.html')
         
         # Créer l'utilisateur dans la base de données locale
@@ -412,6 +438,20 @@ def register():
         execute_query(
             'INSERT INTO users (username, email, password_hash, pterodactyl_user_id) VALUES (?, ?, ?, ?)',
             (username, email, password_hash, pterodactyl_user_id),
+            commit=True
+        )
+        
+        # Récupérer l'ID de l'utilisateur fraîchement créé
+        user_id = execute_query(
+            'SELECT id FROM users WHERE username = ?',
+            (username,),
+            fetch_one=True
+        )['id']
+        
+        # Ajouter l'action réussie dans l'historique
+        execute_query(
+            'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+            (user_id, 'user', 'register', 'success'),
             commit=True
         )
         
@@ -437,6 +477,13 @@ def login():
             session['user_id'] = user['id']
             session['username'] = user['username']
             session['pterodactyl_user_id'] = user['pterodactyl_user_id']
+
+            execute_query(
+                'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+                (session['user_id'], 'user', 'login', 'success'),
+                commit=True
+            )
+            
             flash('Connexion réussie!')
             return redirect(url_for('dashboard'))
         else:
@@ -446,6 +493,12 @@ def login():
 
 @app.route('/logout')
 def logout():
+    execute_query(
+        'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+        (session['user_id'], 'user', 'logout', 'success'),
+        commit=True
+    )
+    
     session.clear()
     flash('Déconnexion réussie')
     return redirect(url_for('index'))
@@ -505,6 +558,12 @@ def create_server():
         tier_id = int(request.form['tier_id'])
         
         if not server_name:
+            execute_query(
+                'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+                (session['user_id'], 'server', 'create', 'failed'),
+                commit=True
+            )
+
             flash('Le nom du serveur est obligatoire')
             return redirect(url_for('create_server'))
         
@@ -526,6 +585,12 @@ def create_server():
         )
         
         if not pterodactyl_server_ids:
+            execute_query(
+                'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+                (session['user_id'], 'server', 'create', 'failed'),
+                commit=True
+            )
+
             flash('Erreur lors de la création du serveur sur Pterodactyl')
             return redirect(url_for('create_server'))
         
@@ -536,6 +601,12 @@ def create_server():
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
             (session['user_id'], server_name, pterodactyl_server_ids['id'],
              pterodactyl_server_ids['uuid'], node_id, egg_id, tier_id, round(time.time())),
+            commit=True
+        )
+
+        execute_query(
+            'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+            (session['user_id'], 'server', 'create', 'success'),
             commit=True
         )
         
@@ -559,7 +630,14 @@ def panel_redirect(uuid):
     return redirect(f'https://panel.flowhost.dev/server/{uuid}')
 
 @app.route('/server/<uuid>/renew')
+@login_required
 def renew_server(uuid):
+    execute_query(
+        'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+        (session['user_id'], 'server', 'renew', 'pending'),
+        commit=True
+    )
+
     token = str(uuid_lib.uuid4())
     renew_tokens[token] = {
         'pterodactyl_server_uuid': uuid,
@@ -575,26 +653,47 @@ def renew_server(uuid):
     return response
 
 @app.route('/server/renewed')
+@login_required
 def validate_renew():
     token = request.cookies.get('renew_token')
     record = renew_tokens.get(token)
     
     # Vérifications initiales
     if not record:
+        execute_query(
+            'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+            (session['user_id'], 'server', 'renew', 'failed'),
+            commit=True
+        )
         flash("Le renouvellement de votre serveur a expiré. Veuillez renouveler le serveur à nouveau")
         return redirect(url_for('dashboard'))
     
     now = time.time()
     
     if now > record['expire']:
+        execute_query(
+            'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+            (session['user_id'], 'server', 'renew', 'failed'),
+            commit=True
+        )
         flash("Le renouvellement de votre serveur a expiré. Veuillez renouveler le serveur à nouveau")
         del renew_tokens[token]
         return redirect(url_for('dashboard'))
     
     if record['ip'] != request.remote_addr:
+        execute_query(
+            'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+            (session['user_id'], 'server', 'renew', 'failed'),
+            commit=True
+        )
         return "IP mismatch", 403
     
     if now - record['created'] < 10:
+        execute_query(
+            'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+            (session['user_id'], 'server', 'renew', 'failed'),
+            commit=True
+        )
         flash("Le renouvellement de votre serveur n'est pas valide. Veuillez renouveler le serveur à nouveau")
         del renew_tokens[token]
         return redirect(url_for('dashboard'))
@@ -626,8 +725,18 @@ def validate_renew():
     
     # Réactiver le serveur sur Pterodactyl
     if unsuspend_pterodactyl_server(server['pterodactyl_server_id']):
+        execute_query(
+            'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+            (session['user_id'], 'server', 'renew', 'success'),
+            commit=True
+        )
         flash("Votre serveur a bien été renouvelé")
     else:
+        execute_query(
+            'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+            (session['user_id'], 'server', 'renew', 'failed'),
+            commit=True
+        )
         flash("Une erreur est survenue lors du renouvellement de votre serveur...")
     
     del renew_tokens[token]
@@ -640,14 +749,29 @@ def delete_server(id):
     server = next((s for s in user_servers if s['pterodactyl_server_id'] == int(id)), None)
     
     if not server:
+        execute_query(
+            'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+            (session['user_id'], 'server', 'delete', 'failed'),
+            commit=True
+        )
         flash("Serveur introuvable")
         return redirect(url_for('dashboard'))
     
     # Supprimer le serveur sur Pterodactyl
     if delete_pterodactyl_server(id):
         delete_server_from_db(id)
+        execute_query(
+            'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+            (session['user_id'], 'server', 'delete', 'success'),
+            commit=True
+        )
         flash("Serveur supprimé avec succès")
     else:
+        execute_query(
+            'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+            (session['user_id'], 'server', 'delete', 'failed'),
+            commit=True
+        )
         flash("Erreur lors de la suppression du serveur")
     
     return redirect(url_for('dashboard'))
