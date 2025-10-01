@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block title %}Historique{% endblock %}
+
+{% block content %}
+
+ <h1>Historique des actions</h1>
+
+    {% if history %}
+    <table>
+        <thead>
+            <tr>
+                <th>Catégorie</th>
+                <th>Action</th>
+                <th>Status</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in history %}
+            <tr>
+                <td>{{ item.category }}</td>
+                <td>{{ item.action }}</td>
+                <td>{{ item.status }}</td>
+                <td>{{ item.created_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Pagination simple -->
+    <nav>
+        {% if page > 1 %}
+        <a href="{{ url_for('account_history', page=page-1) }}">« Précédent</a>
+        {% endif %}
+
+        <span>Page {{ page }} / {{ total_pages }}</span>
+
+        {% if page < total_pages %}
+        <a href="{{ url_for('account_history', page=page+1) }}">Suivant »</a>
+        {% endif %}
+    </nav>
+
+    {% else %}
+    <p>Aucune action enregistrée pour cet utilisateur.</p>
+    {% endif %}
+
+{% endblock %}

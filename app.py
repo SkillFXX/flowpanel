@@ -776,6 +776,42 @@ def delete_server(id):
     
     return redirect(url_for('dashboard'))
 
+@app.route('/account/history/', defaults={'page': 1})
+@app.route('/account/history/<int:page>')
+@login_required
+def account_history(page):
+    user_id = session['user_id']  # par exemple depuis la session
+    if not user_id:
+        flash("Utilisateur non connecté")
+        return redirect(url_for('login'))
+
+    per_page = 50
+    offset = (page - 1) * per_page
+
+    history = execute_query(
+        'SELECT category, action, status, created_at '
+        'FROM history WHERE user_id = ? '
+        'ORDER BY created_at DESC '
+        'LIMIT ? OFFSET ?',
+        (user_id, per_page, offset),
+        fetch_all=True
+    )
+
+    total_count = execute_query(
+        'SELECT COUNT(*) as count FROM history WHERE user_id = ?',
+        (user_id,),
+        fetch_one=True
+    )['count']
+
+    total_pages = (total_count + per_page - 1) // per_page
+
+    return render_template(
+        'history.html',
+        history=history,
+        page=page,
+        total_pages=total_pages
+    )
+
 def check_server_availability():
     """Vérifie et suspend les serveurs expirés"""
     servers = execute_query("SELECT * FROM servers", fetch_all=True)
