@@ -3,26 +3,28 @@
 {% block title %}Connexion - Pterodactyl Manager{% endblock %}
 
 {% block content %}
-<h1>Connexion</h1>
+<section class="container">
+    <header>
+        <h1>Connexion</h1>
+    </header>
 
-<form method="POST">
-    <p>
-        <label>Nom d'utilisateur:</label><br>
-        <input type="text" name="username" required>
-    </p>
-    
-    <p>
-        <label>Mot de passe:</label><br>
-        <input type="password" name="password" required>
-    </p>
-    
-    <p>
-        <input type="submit" value="Se connecter">
-    </p>
-</form>
+    <form method="POST">
+        <fieldset>
+            <label for="username">Nom d'utilisateur</label>
+            <input type="text" id="username" name="username" required>
 
-<p>
-    <a href="{{ url_for('index') }}">Retour à l'accueil</a> |
-    <a href="{{ url_for('register') }}">Créer un compte</a>
-</p>
+            <label for="password">Mot de passe</label>
+            <input type="password" id="password" name="password" required>
+
+            <input type="submit" value="Se connecter">
+        </fieldset>
+    </form>
+
+    <footer>
+        <p>
+            <a href="{{ url_for('index') }}">← Retour à l'accueil</a> |
+            <a href="{{ url_for('register') }}">Créer un compte</a>
+        </p>
+    </footer>
+</section>
 {% endblock %}
