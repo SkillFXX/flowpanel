@@ -493,15 +493,18 @@ def login():
 
 @app.route('/logout')
 def logout():
-    execute_query(
-        'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
-        (session['user_id'], 'user', 'logout', 'success'),
-        commit=True
-    )
+    if 'user_id' in session:
+        execute_query(
+            'INSERT INTO history (user_id, category, action, status) VALUES (?, ?, ?, ?)',
+            (session['user_id'], 'user', 'logout', 'success'),
+            commit=True
+        )
     
-    session.clear()
-    flash('Déconnexion réussie')
-    return redirect(url_for('index'))
+        session.clear()
+        flash('Déconnexion réussie')
+        return redirect(url_for('index'))
+    else:
+        flash('vous etes deja Déconecté')
 
 @app.route('/dashboard')
 @login_required
